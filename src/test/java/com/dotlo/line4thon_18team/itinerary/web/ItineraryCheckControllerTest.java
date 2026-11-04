@@ -111,6 +111,35 @@ class ItineraryCheckControllerTest {
     }
 
     @Test
+    void placeId가_없으면_400이다() throws Exception {
+        mvc.perform(check(ownerId, """
+                        {"origin": "AI_GENERATED",
+                         "days": [{"date": "2026-11-10",
+                                   "visits": [{"itemId": "v1"}]}]}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void date가_없으면_400이다() throws Exception {
+        mvc.perform(check(ownerId, """
+                        {"origin": "AI_GENERATED",
+                         "days": [{"visits": []}]}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void stayMinutes가_범위_밖이면_400이다() throws Exception {
+        mvc.perform(check(ownerId, """
+                        {"origin": "AI_GENERATED",
+                         "days": [{"date": "2026-11-10",
+                                   "visits": [{"itemId": "v1", "placeId": "ChIJ-a", "stayMinutes": 0}]}]}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
     void 남의_여행이면_404다() throws Exception {
         mvc.perform(check(otherId, """
                         {"origin": "AI_GENERATED",

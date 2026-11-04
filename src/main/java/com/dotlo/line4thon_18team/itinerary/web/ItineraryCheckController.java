@@ -1,7 +1,10 @@
 package com.dotlo.line4thon_18team.itinerary.web;
 
 import com.dotlo.line4thon_18team.auth.LoginUser;
+import com.dotlo.line4thon_18team.global.error.BusinessException;
+import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.itinerary.ItineraryValidationService;
+import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,16 @@ public class ItineraryCheckController {
     public ValidationResult check(@PathVariable("tripId") long tripId,
                                   @LoginUser Long userId,
                                   @Valid @RequestBody ItineraryCheckRequest request) {
-        return validationService.validate(tripId, userId, request.toDraft(), request.origin());
+        return validationService.validate(tripId, userId, toDraft(request), request.origin());
+    }
+
+    // 필드 검사(@NotBlank 등)를 지나온 값이라 보통은 여기서 걸리지 않지만, 400으로 나가도록 함께 막는다
+    private static ItineraryDraft toDraft(ItineraryCheckRequest request) {
+        try {
+            return request.toDraft();
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new BusinessException(ErrorCode.INVALID_ITINERARY,
+                    ErrorCode.INVALID_ITINERARY.getMessage() + " " + e.getMessage());
+        }
     }
 }
