@@ -4,6 +4,7 @@ import com.dotlo.line4thon_18team.global.llm.schema.SchemaLoader;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanEditInput.CurrentDay;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanEditInput.CurrentVisit;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanEditOutput.VisitRef;
+import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationInput.Candidate;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationInput.PlaceRef;
 import com.dotlo.line4thon_18team.place.PlaceCategory;
 import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
@@ -185,6 +186,40 @@ class PlanEditTaskTest {
 
         assertThat(task.validate(input("아무거나"), output))
                 .anySatisfy(problem -> assertThat(problem).contains("3일차는 여행 기간"));
+    }
+
+    // ---- 추가 목록 추리기 ----
+
+    @Test
+    void 지금_일정에_있는_장소는_추가_목록에서_뺀다() {
+        PlanEditInput input = PlanEditInput.of("오사카", 2, NORMAL, currentDays(), List.of(
+                new PlaceRef("place-v-aaa11111", "도톤보리", PlaceCategory.SIGHTSEEING),
+                new PlaceRef("p-spa", "스파월드", null)), "아무거나");
+
+        assertThat(input.addable()).extracting(Candidate::placeId).containsExactly("p-spa");
+        assertThat(input.byNumber(1).name()).isEqualTo("스파월드");
+    }
+
+    @Test
+    void 추가_목록에_같은_장소가_두_번_오면_한_번만_번호를_매긴다() {
+        PlanEditInput input = PlanEditInput.of("오사카", 2, NORMAL, currentDays(), List.of(
+                new PlaceRef("p-spa", "스파월드", null),
+                new PlaceRef("p-spa", "스파월드", null)), "아무거나");
+
+        assertThat(input.addable()).hasSize(1);
+        assertThat(input.hasNumber(2)).isFalse();
+    }
+
+    @Test
+    void 추려낸_뒤_남은_장소에_1번부터_다시_번호를_매긴다() {
+        PlanEditInput input = PlanEditInput.of("오사카", 2, NORMAL, currentDays(), List.of(
+                new PlaceRef("place-v-aaa11111", "도톤보리", PlaceCategory.SIGHTSEEING),
+                new PlaceRef("p-spa", "스파월드", null),
+                new PlaceRef("p-zoo", "덴노지 동물원", null)), "아무거나");
+
+        assertThat(input.addable()).extracting(Candidate::number).containsExactly(1, 2);
+        assertThat(input.byNumber(1).name()).isEqualTo("스파월드");
+        assertThat(input.byNumber(2).name()).isEqualTo("덴노지 동물원");
     }
 
     // ---- 도움 함수 ----

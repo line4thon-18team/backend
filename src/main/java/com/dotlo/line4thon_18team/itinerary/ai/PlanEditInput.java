@@ -59,14 +59,26 @@ public record PlanEditInput(String city, int dayCount, PreferenceProfile prefere
         previousProblems = previousProblems == null ? List.of() : List.copyOf(previousProblems);
     }
 
-    /** 추가할 수 있는 장소에 번호를 붙여 만든다. */
+    /**
+     * 추가할 수 있는 장소에 번호를 붙여 만든다. 지금 일정에 이미 있는 장소와 목록 안에서 겹친 장소는 뺀다.
+     *
+     * <p>이미 있는 장소를 빼는 이유는, 모델이 '그 방문은 그대로 두고' + '같은 장소를 새로 추가'를 함께
+     * 내놓으면 같은 곳을 두 번 가는 일정이 되는데 번호만 보는 검증으로는 걸러낼 수 없기 때문이다.
+     * 넘겨주는 쪽에서 걸러도 되지만 여기서 막아 두면 어디서 부르든 확실하다.
+     */
     public static PlanEditInput of(String city, int dayCount, PreferenceProfile preferences,
                                    List<CurrentDay> currentDays, List<PlaceRef> addable, String request) {
+        Set<String> inItinerary = new LinkedHashSet<>();
+        if (currentDays != null) {
+            currentDays.forEach(day -> day.visits().forEach(visit -> inItinerary.add(visit.placeId())));
+        }
         List<Candidate> candidates = new ArrayList<>();
-        List<PlaceRef> refs = addable == null ? List.of() : addable;
-        for (int i = 0; i < refs.size(); i++) {
-            PlaceRef place = refs.get(i);
-            candidates.add(new Candidate(i + 1, place.placeId(), place.name(), place.category()));
+        Set<String> numbered = new LinkedHashSet<>();
+        for (PlaceRef place : addable == null ? List.<PlaceRef>of() : addable) {
+            if (inItinerary.contains(place.placeId()) || !numbered.add(place.placeId())) {
+                continue;
+            }
+            candidates.add(new Candidate(candidates.size() + 1, place.placeId(), place.name(), place.category()));
         }
         return new PlanEditInput(city, dayCount, preferences, currentDays, candidates, request, List.of());
     }
