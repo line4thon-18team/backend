@@ -8,6 +8,7 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -126,6 +127,31 @@ class ItineraryDiffTest {
         ItineraryDiff diff = ItineraryDiff.between(before, after);
         assertThat(diff.reorderedDays()).isEmpty();
         assertThat(diff.changesOf(ChangeKind.MOVED_DAY)).hasSize(1);
+    }
+
+    @Test
+    void 예약_시각이_바뀌면_알려준다() {
+        ItineraryDraft before = ItineraryDraft.of(
+                DayDraft.of(DAY1, visit("v-1").withFixedStart(LocalTime.of(12, 0))));
+        ItineraryDraft after = ItineraryDraft.of(
+                DayDraft.of(DAY1, visit("v-1").withFixedStart(LocalTime.of(18, 0))));
+
+        ItemChange changed = only(ItineraryDiff.between(before, after), ChangeKind.FIXED_START_CHANGED);
+        assertThat(changed.fromFixedStart()).isEqualTo(LocalTime.of(12, 0));
+        assertThat(changed.toFixedStart()).isEqualTo(LocalTime.of(18, 0));
+    }
+
+    @Test
+    void 예약_시각을_지우면_알려준다() {
+        ItineraryDraft before = ItineraryDraft.of(
+                DayDraft.of(DAY1, visit("v-1").withFixedStart(LocalTime.of(12, 0))));
+        ItineraryDraft after = ItineraryDraft.of(DayDraft.of(DAY1, visit("v-1")));
+
+        ItineraryDiff diff = ItineraryDiff.between(before, after);
+        assertThat(diff.isEmpty()).isFalse();
+        ItemChange changed = only(diff, ChangeKind.FIXED_START_CHANGED);
+        assertThat(changed.fromFixedStart()).isEqualTo(LocalTime.of(12, 0));
+        assertThat(changed.toFixedStart()).isNull();
     }
 
     private static VisitDraft visit(String itemId) {
