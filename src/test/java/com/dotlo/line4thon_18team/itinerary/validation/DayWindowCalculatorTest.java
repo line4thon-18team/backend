@@ -102,6 +102,26 @@ class DayWindowCalculatorTest {
     }
 
     @Test
+    void 렌터카를_빌린_출국일은_공항_이동도_운전으로_묻는다() {
+        TripContext trip = new TripContext(ZONE, DAY1, DAY4, Map.of(), HOTEL_NAMBA,
+                KIX, KIX, Set.of(DAY4), null, DAY4.atTime(15, 0));
+
+        calculator.calculate(trip, PreferenceProfile.defaults());
+
+        assertThat(travel.queries().get(0).mode()).isEqualTo(TravelMode.DRIVE);
+    }
+
+    @Test
+    void 렌터카가_없는_날의_공항_이동은_대중교통으로_묻는다() {
+        TripContext trip = new TripContext(ZONE, DAY1, DAY4, Map.of(), HOTEL_NAMBA,
+                KIX, KIX, Set.of(), null, DAY4.atTime(15, 0));
+
+        calculator.calculate(trip, PreferenceProfile.defaults());
+
+        assertThat(travel.queries().get(0).mode()).isEqualTo(TravelMode.TRANSIT);
+    }
+
+    @Test
     void 밤늦게_도착하면_첫날은_일정을_넣을_시간이_없다() {
         TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(22, 30), null);
 
