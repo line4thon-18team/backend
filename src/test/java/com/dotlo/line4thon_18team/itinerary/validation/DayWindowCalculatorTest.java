@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DAY1;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DAY2;
@@ -89,7 +90,7 @@ class DayWindowCalculatorTest {
     void 들어오는_공항과_나가는_공항이_다르면_각각_그_공항을_쓴다() {
         // 이타미로 들어와 간사이로 나가는 경우. 마지막 날 마감이 입국 공항 기준으로 잡히면 안 된다
         TripContext trip = new TripContext(ZONE, DAY1, DAY4, Map.of(), HOTEL_NAMBA,
-                ITAMI, KIX, DAY1.atTime(13, 0), DAY4.atTime(15, 0));
+                ITAMI, KIX, Set.of(), DAY1.atTime(13, 0), DAY4.atTime(15, 0));
 
         calculator.calculate(trip, PreferenceProfile.defaults());
 

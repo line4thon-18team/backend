@@ -79,7 +79,7 @@ public final class OsakaFixtures {
     public static TripContext tripStayingAtNamba() {
         return new TripContext(ZONE, DAY1, DAY4,
                 Map.of(DAY1, HOTEL_NAMBA, DAY2, HOTEL_NAMBA, DAY3, HOTEL_NAMBA),
-                HOTEL_NAMBA, KIX, KIX, null, null);
+                HOTEL_NAMBA, KIX, KIX, Set.of(), null, null);
     }
 
     /**
@@ -89,7 +89,14 @@ public final class OsakaFixtures {
     public static TripContext tripMovingToUmeda() {
         return new TripContext(ZONE, DAY1, DAY4,
                 Map.of(DAY1, HOTEL_NAMBA, DAY2, HOTEL_NAMBA, DAY3, HOTEL_UMEDA),
-                HOTEL_NAMBA, KIX, KIX, null, null);
+                HOTEL_NAMBA, KIX, KIX, Set.of(), null, null);
+    }
+
+    /** 3박 모두 난바에 묵고, 2일차에 렌터카를 빌린 3박 4일 */
+    public static TripContext tripWithRentalOnDay2() {
+        return new TripContext(ZONE, DAY1, DAY4,
+                Map.of(DAY1, HOTEL_NAMBA, DAY2, HOTEL_NAMBA, DAY3, HOTEL_NAMBA),
+                HOTEL_NAMBA, KIX, KIX, Set.of(DAY2), null, null);
     }
 
     public static FakePlaceInfoProvider places() {

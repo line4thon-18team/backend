@@ -16,8 +16,10 @@ import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
 import com.dotlo.line4thon_18team.reservation.entity.FlightDirection;
 import com.dotlo.line4thon_18team.reservation.entity.TripFlight;
+import com.dotlo.line4thon_18team.reservation.entity.TripRental;
 import com.dotlo.line4thon_18team.reservation.entity.TripStay;
 import com.dotlo.line4thon_18team.reservation.repository.TripFlightRepository;
+import com.dotlo.line4thon_18team.reservation.repository.TripRentalRepository;
 import com.dotlo.line4thon_18team.reservation.repository.TripStayRepository;
 import com.dotlo.line4thon_18team.preference.PreferenceService;
 import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
@@ -33,6 +35,7 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 일정 검증 (GEN-CHECK-001). 방문 순서만 받아서 시각을 계산하고 영업시간·이동시간 문제를 찾는다.
@@ -50,6 +53,7 @@ public class ItineraryValidationService {
     private final OpeningHours openingHours;          // BE2 영업시간
     private final TripStayRepository tripStayRepository;      // BE2 숙소
     private final TripFlightRepository tripFlightRepository;  // BE2 항공편
+    private final TripRentalRepository tripRentalRepository;  // BE2 렌터카
     private final TravelTimeProvider travelTimeProvider;
     private final ValidationPolicy validationPolicy;
 
@@ -103,7 +107,7 @@ public class ItineraryValidationService {
         Flights flights = flights(tripFlightRepository.findAllByTripId(tripId));
         return new TripContext(ZoneId.of(city.timezone()), trip.getStartDate(), trip.getEndDate(),
                 nights, cityCenter, flights.arrivalAirport(), flights.departureAirport(),
-                flights.arrivalAt(), flights.departureAt());
+                rentalDays(tripId), flights.arrivalAt(), flights.departureAt());
     }
 
     /*
@@ -129,6 +133,14 @@ public class ItineraryValidationService {
             }
         }
         return byNight;
+    }
+
+    /** 렌터카를 빌린 날. 그 날은 걷기 기준을 넘는 구간을 운전으로 계산한다. */
+    private Set<LocalDate> rentalDays(long tripId) {
+        return tripRentalRepository.findByTripId(tripId)
+                .map(TripRental::getDates)
+                .map(Set::copyOf)
+                .orElseGet(Set::of);
     }
 
     /*
