@@ -15,16 +15,19 @@ import java.util.Objects;
  * @param zone         여행지 시간대 (예: Asia/Tokyo). Routes API 출발 시각 계산에 쓴다
  * @param nightlyStays 그 날 "밤" 묵는 곳. 숙소를 하나도 입력하지 않았으면 비어 있다
  * @param base         숙소를 모를 때 쓰는 기준점 (도시 중심). 하루를 여기서 출발해 여기로 돌아오는 것으로 본다
- * @param airport      여행지 공항 좌표 (없으면 공항 이동시간 기본값 사용)
- * @param arrivalAt    첫날 항공 도착 시각 (없으면 첫날도 평소처럼 계산)
- * @param departureAt  마지막 날 항공 출발 시각 (없으면 마지막 날도 평소처럼 계산)
+ * @param arrivalAirport   들어오는 공항 좌표. 첫날 공항→숙소 이동에 쓴다 (없으면 기본값)
+ * @param departureAirport 나가는 공항 좌표. 마지막 날 숙소→공항 이동에 쓴다 (없으면 기본값).
+ *                         간사이로 들어와 이타미로 나가는 경우처럼 입국·출국 공항이 다를 수 있다
+ * @param arrivalAt        첫날 항공 도착 시각 (없으면 첫날도 평소처럼 계산)
+ * @param departureAt      마지막 날 항공 출발 시각 (없으면 마지막 날도 평소처럼 계산)
  */
 public record TripContext(ZoneId zone,
                           LocalDate startDate,
                           LocalDate endDate,
                           Map<LocalDate, GeoPoint> nightlyStays,
                           GeoPoint base,
-                          GeoPoint airport,
+                          GeoPoint arrivalAirport,
+                          GeoPoint departureAirport,
                           LocalDateTime arrivalAt,
                           LocalDateTime departureAt) {
 
@@ -39,10 +42,10 @@ public record TripContext(ZoneId zone,
         nightlyStays = nightlyStays == null ? Map.of() : Map.copyOf(nightlyStays);
     }
 
-    /** 숙소를 입력하지 않은 여행. 모든 날을 base에서 출발해 base로 돌아오는 것으로 본다. */
+    /** 숙소를 입력하지 않고, 들어오고 나가는 공항이 같은 여행. */
     public static TripContext withoutStays(ZoneId zone, LocalDate startDate, LocalDate endDate, GeoPoint base,
                                            GeoPoint airport, LocalDateTime arrivalAt, LocalDateTime departureAt) {
-        return new TripContext(zone, startDate, endDate, Map.of(), base, airport, arrivalAt, departureAt);
+        return new TripContext(zone, startDate, endDate, Map.of(), base, airport, airport, arrivalAt, departureAt);
     }
 
     /**

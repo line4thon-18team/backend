@@ -15,11 +15,13 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DAY1;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DAY2;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DAY4;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.HOTEL_NAMBA;
+import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.ITAMI;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.KIX;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.ZONE;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.trip;
@@ -81,6 +83,21 @@ class DayWindowCalculatorTest {
         assertThat(windows.get(3).end()).isEqualTo(DAY4.atTime(11, 40));
         assertThat(windows.get(3).adjustments()).containsExactly(WindowAdjustment.SHORTENED_BY_DEPARTURE);
         assertThat(windows.get(2).end()).isEqualTo(DAY4.minusDays(1).atTime(21, 30));
+    }
+
+    @Test
+    void 들어오는_공항과_나가는_공항이_다르면_각각_그_공항을_쓴다() {
+        // 이타미로 들어와 간사이로 나가는 경우. 마지막 날 마감이 입국 공항 기준으로 잡히면 안 된다
+        TripContext trip = new TripContext(ZONE, DAY1, DAY4, Map.of(), HOTEL_NAMBA,
+                ITAMI, KIX, DAY1.atTime(13, 0), DAY4.atTime(15, 0));
+
+        calculator.calculate(trip, PreferenceProfile.defaults());
+
+        List<TravelQuery> queries = travel.queries();
+        assertThat(queries.get(0).from()).isEqualTo(ITAMI);
+        assertThat(queries.get(0).to()).isEqualTo(HOTEL_NAMBA);
+        assertThat(queries.get(1).from()).isEqualTo(HOTEL_NAMBA);
+        assertThat(queries.get(1).to()).isEqualTo(KIX);
     }
 
     @Test

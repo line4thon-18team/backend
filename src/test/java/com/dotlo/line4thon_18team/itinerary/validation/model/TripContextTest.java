@@ -66,6 +66,6 @@ class TripContextTest {
     private static TripContext movingToUmeda() {
         return new TripContext(ZONE, DAY1, DAY4,
                 Map.of(DAY1, NAMBA, DAY2, NAMBA, DAY3, UMEDA),
-                CITY_CENTER, null, null, null);
+                CITY_CENTER, null, null, null, null);
     }
 }

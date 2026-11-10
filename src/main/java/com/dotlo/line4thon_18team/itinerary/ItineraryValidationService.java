@@ -102,7 +102,8 @@ public class ItineraryValidationService {
         Map<LocalDate, GeoPoint> nights = nightlyStays(trip, tripStayRepository.findAllByTripIdOrderByCheckInAsc(tripId));
         Flights flights = flights(tripFlightRepository.findAllByTripId(tripId));
         return new TripContext(ZoneId.of(city.timezone()), trip.getStartDate(), trip.getEndDate(),
-                nights, cityCenter, flights.airport(), flights.arrivalAt(), flights.departureAt());
+                nights, cityCenter, flights.arrivalAirport(), flights.departureAirport(),
+                flights.arrivalAt(), flights.departureAt());
     }
 
     /*
@@ -131,27 +132,28 @@ public class ItineraryValidationService {
     }
 
     /*
-     * 공항은 가는 편이 내리는 곳을 쓴다. 가는 편이 없으면 오는 편이 타는 곳을 쓴다.
-     * 간사이로 들어와 이타미에서 나가는 경우처럼 둘이 다를 수 있지만, 검증기는 공항을 하나만 받는다.
+     * 들어오는 공항은 가는 편이 내리는 곳, 나가는 공항은 오는 편이 타는 곳이다.
+     * 간사이로 들어와 이타미로 나가는 경우처럼 둘이 다를 수 있어서 따로 담는다.
+     * 한쪽 항공편만 등록했으면 그 공항만 채우고, 나머지는 기본 이동시간으로 계산한다.
      */
-    private static Flights flights(List<TripFlight> flights) {
-        GeoPoint airport = null;
+    static Flights flights(List<TripFlight> flights) {
+        GeoPoint arrivalAirport = null;
+        GeoPoint departureAirport = null;
         LocalDateTime arrivalAt = null;
         LocalDateTime departureAt = null;
         for (TripFlight flight : flights) {
             if (flight.getDirection() == FlightDirection.OUTBOUND) {
-                airport = new GeoPoint(flight.getArrivalLatitude(), flight.getArrivalLongitude());
+                arrivalAirport = new GeoPoint(flight.getArrivalLatitude(), flight.getArrivalLongitude());
                 arrivalAt = flight.getArrivalAt();
             } else {
+                departureAirport = new GeoPoint(flight.getDepartureLatitude(), flight.getDepartureLongitude());
                 departureAt = flight.getDepartureAt();
-                if (airport == null) {
-                    airport = new GeoPoint(flight.getDepartureLatitude(), flight.getDepartureLongitude());
-                }
             }
         }
-        return new Flights(airport, arrivalAt, departureAt);
+        return new Flights(arrivalAirport, departureAirport, arrivalAt, departureAt);
     }
 
-    private record Flights(GeoPoint airport, LocalDateTime arrivalAt, LocalDateTime departureAt) {
+    record Flights(GeoPoint arrivalAirport, GeoPoint departureAirport,
+                   LocalDateTime arrivalAt, LocalDateTime departureAt) {
     }
 }
