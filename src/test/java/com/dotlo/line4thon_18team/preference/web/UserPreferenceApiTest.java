@@ -1,5 +1,6 @@
 package com.dotlo.line4thon_18team.preference.web;
 
+import com.dotlo.line4thon_18team.preference.UserPreferenceService;
 import com.dotlo.line4thon_18team.user.entity.User;
 import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,14 +8,20 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -32,6 +39,7 @@ class UserPreferenceApiTest {
 
     @Autowired MockMvc mvc;
     @Autowired UserRepository users;
+    @MockitoSpyBean UserPreferenceService userPreferenceService;
 
     private Long userId;
 
@@ -95,6 +103,21 @@ class UserPreferenceApiTest {
                  "interests": [], "avoid": [], "notes": ["1","2","3","4","5","6"], "rawText": null}""")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PREFERENCE"));
+    }
+
+    @Test
+    void 처음_저장이_동시에_두_번_들어와도_500이_아니다() throws Exception {
+        // 다른 요청이 먼저 저장해서 이 요청이 user_id 유니크에 걸린 상황. 두 번째 시도는 실제로 저장된다
+        doThrow(new DataIntegrityViolationException("uk_user_preferences_user_id"))
+                .doCallRealMethod()
+                .when(userPreferenceService).save(eq(userId), any());
+
+        save("""
+                {"pace": "RELAXED", "walking": "NORMAL", "dayStart": "NORMAL",
+                 "interests": [], "avoid": [], "notes": [], "rawText": null}""")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.saved").value(true))
+                .andExpect(jsonPath("$.preferences.pace").value("RELAXED"));
     }
 
     @Test
