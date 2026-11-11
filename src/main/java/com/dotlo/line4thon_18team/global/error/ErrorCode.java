@@ -46,6 +46,7 @@ public enum ErrorCode {
     NO_SAVED_PLACES(HttpStatus.BAD_REQUEST, "파일에서 저장된 장소를 찾지 못했습니다."),
     SAVED_PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "저장 장소를 찾을 수 없습니다."),
     INVALID_PLACE_ID(HttpStatus.BAD_REQUEST, "존재하지 않는 장소입니다."),
+    PHOTO_NOT_FOUND(HttpStatus.NOT_FOUND, "장소 사진을 찾을 수 없습니다."),
     PLACE_NOT_REVIEWABLE(HttpStatus.CONFLICT, "확인 필요 상태인 장소만 후보를 선택할 수 있습니다."),
     INVALID_LIST_URL(HttpStatus.BAD_REQUEST, "구글맵 공유 리스트 링크가 아닙니다."),
     LIST_NOT_ACCESSIBLE(HttpStatus.BAD_REQUEST, "리스트를 열 수 없습니다. 공개된 공유 리스트 링크인지 확인해 주세요."),
@@ -75,6 +76,12 @@ public enum ErrorCode {
     ITINERARY_REQUIRED(HttpStatus.BAD_REQUEST, "확정할 일정이 없습니다. 일정을 먼저 만들어 주세요."),
     TRIP_NOT_CONFIRMED(HttpStatus.BAD_REQUEST, "일정을 확정한 여행만 공유할 수 있습니다."),
     SHARE_NOT_FOUND(HttpStatus.NOT_FOUND, "공유된 일정을 찾을 수 없습니다."),
+
+    // ===== 동행 (BE1) =====
+    INVITE_NOT_FOUND(HttpStatus.NOT_FOUND, "초대 링크를 찾을 수 없습니다."),
+    INVITE_EXPIRED(HttpStatus.BAD_REQUEST, "초대가 만료됐어요. 초대한 친구에게 새 링크를 받아 주세요."),
+    TRIP_MEMBER_FULL(HttpStatus.BAD_REQUEST, "여행 인원이 가득 찼어요. (최대 6명)"),
+    SOLO_TRIP_NOT_INVITABLE(HttpStatus.BAD_REQUEST, "혼자 가는 여행은 친구를 초대할 수 없어요. 여행 정보에서 동행을 바꿔 주세요."),
 
     ; // 에러 추가는 이 위에 (각 줄은 쉼표로 끝내기)
 
