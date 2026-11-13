@@ -78,6 +78,7 @@ public enum ErrorCode {
     POLL_NOT_FOUND(HttpStatus.NOT_FOUND, "투표를 찾을 수 없습니다."),
     POLL_CLOSED(HttpStatus.CONFLICT, "이미 끝난 투표입니다."),
     INVALID_POLL_CANDIDATE(HttpStatus.BAD_REQUEST, "그 투표의 후보가 아닙니다."),
+    NO_POLL_CANDIDATES(HttpStatus.BAD_REQUEST, "투표에 올릴 장소를 찾지 못했습니다. 조금 더 이야기한 뒤에 다시 불러 주세요."),
 
     // ===== 일정 저장 (BE1) =====
     ITINERARY_NOT_FOUND(HttpStatus.NOT_FOUND, "저장된 일정이 없습니다."),

@@ -34,7 +34,7 @@ import java.util.Map;
 public class PollService {
 
     /** 후보가 2개 미만이면 고를 게 없고, 너무 많으면 화면에서 고르기 어렵다. */
-    static final int MIN_CANDIDATES = 2;
+    public static final int MIN_CANDIDATES = 2;
     static final int MAX_CANDIDATES = 5;
 
     /** 채팅 조회에 함께 내려줄 최근 투표 수. */
