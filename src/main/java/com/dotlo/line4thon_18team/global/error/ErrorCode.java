@@ -74,6 +74,10 @@ public enum ErrorCode {
     PLACE_NOT_PLANNABLE(HttpStatus.BAD_REQUEST, "이 장소는 일정에 넣을 수 없습니다."),
     PLACE_ALREADY_IN_ITINERARY(HttpStatus.BAD_REQUEST, "이미 일정에 있는 장소입니다."),
     PLACE_ADD_FAILED(HttpStatus.BAD_REQUEST, "장소를 넣을 자리를 찾지 못했습니다."),
+    INVALID_POLL(HttpStatus.BAD_REQUEST, "투표를 만들 수 없습니다."),
+    POLL_NOT_FOUND(HttpStatus.NOT_FOUND, "투표를 찾을 수 없습니다."),
+    POLL_CLOSED(HttpStatus.CONFLICT, "이미 끝난 투표입니다."),
+    INVALID_POLL_CANDIDATE(HttpStatus.BAD_REQUEST, "그 투표의 후보가 아닙니다."),
 
     // ===== 일정 저장 (BE1) =====
     ITINERARY_NOT_FOUND(HttpStatus.NOT_FOUND, "저장된 일정이 없습니다."),
