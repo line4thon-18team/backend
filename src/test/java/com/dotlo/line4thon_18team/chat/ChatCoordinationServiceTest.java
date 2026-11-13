@@ -107,11 +107,28 @@ class ChatCoordinationServiceTest {
     }
 
     @Test
-    void 구성원이_아닌_사람의_메시지가_섞이면_400이고_AI를_부르지_않는다() {
-        assertThatThrownBy(() -> service.coordinate(TRIP, ME, List.of(
-                message(DAEUN, "유니버설 가고 싶어"), message(STRANGER, "여기 좋던데"))))
+    void 나간_사람의_메시지는_건너뛴다() {
+        // 여행을 나갔거나 탈퇴해도 지난 메시지는 채팅방에 남는다. 그 사람 의견까지 조율에 넣지 않는다
+        givenAnswer(new CoordinationOutput(List.of(), List.of("a", "b"), "정리했어요."));
+
+        service.coordinate(TRIP, ME, List.of(
+                message(DAEUN, "유니버설 가고 싶어"),
+                message(STRANGER, "나 빠질게"),
+                message(JIWOO, "입장료가 부담돼")));
+
+        ArgumentCaptor<CoordinationInput> input = ArgumentCaptor.forClass(CoordinationInput.class);
+        Mockito.verify(llm).execute(Mockito.any(CoordinationTask.class), input.capture());
+        assertThat(input.getValue().lines()).extracting(CoordinationInput.Line::text)
+                .containsExactly("유니버설 가고 싶어", "입장료가 부담돼");
+        assertThat(input.getValue().lines()).extracting(CoordinationInput.Line::memberNumber)
+                .containsExactly(1, 2);
+    }
+
+    @Test
+    void 남은_구성원의_말이_하나도_없으면_400이고_AI를_부르지_않는다() {
+        assertThatThrownBy(() -> service.coordinate(TRIP, ME, List.of(message(STRANGER, "나 빠질게"))))
                 .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_CHAT_MESSAGE);
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NO_MESSAGES_TO_COORDINATE);
 
         Mockito.verifyNoInteractions(llm);
     }

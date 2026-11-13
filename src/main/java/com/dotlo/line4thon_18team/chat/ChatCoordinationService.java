@@ -16,9 +16,11 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 의견 조율 (COLLAB-COORD-001). 채팅방 대화를 읽고 사람별로 무엇을 원하는지 정리한 뒤,
@@ -43,15 +45,19 @@ public class ChatCoordinationService {
     private final CoordinationTask coordinationTask;
 
     /**
-     * @throws BusinessException 구성원이 아닌 여행·없는 여행(404), 구성원이 아닌 사람의 메시지(400)
+     * @throws BusinessException 구성원이 아닌 여행·없는 여행(404), 정리할 대화가 하나도 남지 않음(400)
      */
     public CoordinationResponse coordinate(long tripId, long userId, List<CoordinationCommand.Message> messages) {
         Trip trip = tripService.findMemberTrip(userId, tripId);
 
         Map<Long, Integer> numberByUser = numberInSpeakingOrder(trip, messages);
         List<CoordinationInput.Line> lines = messages.stream()
+                .filter(message -> numberByUser.containsKey(message.userId()))
                 .map(message -> new CoordinationInput.Line(numberByUser.get(message.userId()), message.text()))
                 .toList();
+        if (lines.isEmpty()) {
+            throw new BusinessException(ErrorCode.NO_MESSAGES_TO_COORDINATE);
+        }
 
         CoordinationOutput output = llm.execute(coordinationTask,
                 new CoordinationInput(trip.getCity(), lines)).value();
@@ -62,19 +68,26 @@ public class ChatCoordinationService {
                 options(output));
     }
 
-    /** 처음 말한 순서대로 1번부터 붙인다. 같은 사람이 여러 번 말해도 번호는 하나다. */
+    /**
+     * 처음 말한 순서대로 1번부터 붙인다. 같은 사람이 여러 번 말해도 번호는 하나다.
+     *
+     * <p>여행을 나갔거나 탈퇴한 사람의 지난 메시지는 채팅방에 그대로 남는다. 그 사람에게는 번호를 주지
+     * 않고 건너뛴다. 지금 함께 가는 사람들끼리 조율하는 자리이기도 하고, 번호가 없으면 요약에
+     * 그 사람 줄이 생기지 않아 화면에서 이름 없는 줄이 나오는 일도 없다.
+     */
     private Map<Long, Integer> numberInSpeakingOrder(Trip trip, List<CoordinationCommand.Message> messages) {
         Map<Long, Integer> numberByUser = new LinkedHashMap<>();
+        Set<Long> left = new HashSet<>();   // 같은 사람을 여러 번 조회하지 않으려고 기억해 둔다
         for (CoordinationCommand.Message message : messages) {
-            if (numberByUser.containsKey(message.userId())) {
+            Long writer = message.userId();
+            if (numberByUser.containsKey(writer) || left.contains(writer)) {
                 continue;
             }
-            if (!tripService.isMember(trip, message.userId())) {
-                // 구성원이 아닌 사람의 말이 섞이면, 되돌린 요약이 화면에서 이름 없는 줄로 나온다
-                throw new BusinessException(ErrorCode.INVALID_CHAT_MESSAGE,
-                        ErrorCode.INVALID_CHAT_MESSAGE.getMessage() + " 여행 구성원이 아닌 사람의 메시지가 있습니다.");
+            if (tripService.isMember(trip, writer)) {
+                numberByUser.put(writer, numberByUser.size() + 1);
+            } else {
+                left.add(writer);
             }
-            numberByUser.put(message.userId(), numberByUser.size() + 1);
         }
         return numberByUser;
     }
