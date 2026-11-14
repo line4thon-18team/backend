@@ -8,6 +8,7 @@ import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.itinerary.ItineraryTripCleanupService;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
+import com.dotlo.line4thon_18team.member.service.TripLeaveService;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
@@ -50,6 +51,7 @@ class ChatPollApiTest {
     @Autowired UserRepository users;
     @Autowired TripRepository trips;
     @Autowired TripMemberRepository tripMembers;
+    @Autowired TripLeaveService tripLeaveService;
     @Autowired TripPollRepository polls;
     @Autowired ItineraryTripCleanupService cleanupService;
 
@@ -151,6 +153,34 @@ class ChatPollApiTest {
                 .andExpect(jsonPath("$[0].pollId").value(second.pollId()))
                 .andExpect(jsonPath("$[1].pollId").value(first.pollId()))
                 .andExpect(jsonPath("$[0].totalMembers").value(2));
+    }
+
+    @Test
+    void 나간_사람의_표는_집계와_마감에서_제외한다() throws Exception {
+        User remaining = newUser("남은 동행자");
+        tripMembers.save(TripMember.create(trip, remaining));
+        PollView poll = givenPoll();
+        long firstCandidate = poll.candidates().get(0).id();
+        long secondCandidate = poll.candidates().get(1).id();
+        vote(companion, poll.pollId(), firstCandidate).andExpect(status().isOk());
+        tripLeaveService.leave(trip.getId(), companion);
+
+        vote(owner, poll.pollId(), secondCandidate)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.votedCount").value(1))
+                .andExpect(jsonPath("$.totalMembers").value(2))
+                .andExpect(jsonPath("$.candidates[0].voterUserIds").isEmpty());
+
+        mvc.perform(get("/api/trips/{tripId}/chat/polls", trip.getId()).header("X-User-Id", remaining.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].votedCount").value(1))
+                .andExpect(jsonPath("$[0].candidates[0].votes").value(0));
+
+        vote(remaining.getId(), poll.pollId(), secondCandidate)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CLOSED"))
+                .andExpect(jsonPath("$.votedCount").value(2));
     }
 
     @Test

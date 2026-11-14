@@ -6,7 +6,6 @@ import com.dotlo.line4thon_18team.chat.poll.dto.PollView;
 import com.dotlo.line4thon_18team.chat.poll.dto.VoteCommand;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,14 +31,7 @@ public class ChatPollController {
     @PostMapping("/{pollId}/votes")
     public PollView vote(@PathVariable("tripId") long tripId, @PathVariable("pollId") long pollId,
                          @LoginUser Long userId, @Valid @RequestBody VoteCommand command) {
-        try {
-            return pollService.vote(tripId, userId, pollId, command.candidateId());
-        } catch (DataIntegrityViolationException e) {
-            // 같은 사람이 동시에 두 번 누르면 둘 다 표가 없다고 보고 넣다가 (poll_id, user_id) 유니크에 걸린다.
-            // 실패한 트랜잭션이 끝난 뒤 다시 하면 먼저 생긴 표를 옮기게 된다.
-            // 서비스 안에서 다시 시도할 수 없는 이유는 그 트랜잭션에 롤백 표시가 찍혀 있기 때문이다
-            return pollService.vote(tripId, userId, pollId, command.candidateId());
-        }
+        return pollService.vote(tripId, userId, pollId, command.candidateId());
     }
 
     /** 이 여행의 최근 투표 상태. 채팅 메시지 조회(BE2)가 같은 값을 함께 내려주므로 보조 수단이다. */

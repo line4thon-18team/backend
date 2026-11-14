@@ -11,16 +11,20 @@ import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
+import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 채팅방 투표 (COLLAB-POLL-001). 후보를 만드는 것은 @도틀로 투표 만들기(AI)뿐이라 생성 API 는 없고,
@@ -41,6 +45,7 @@ public class PollService {
     static final int RECENT_LIMIT = 20;
 
     private final TripService tripService;
+    private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
     private final TripPollRepository pollRepository;
     private final TripPollVoteRepository voteRepository;
@@ -50,9 +55,9 @@ public class PollService {
      *
      * @throws BusinessException 구성원이 아닌 여행·없는 여행(404), 후보 개수가 범위 밖(400)
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public PollView create(long tripId, long userId, String question, List<NewCandidate> candidates) {
-        Trip trip = tripService.findMemberTrip(userId, tripId);
+        Trip trip = lockMemberTrip(tripId, userId);
         if (candidates == null || candidates.size() < MIN_CANDIDATES || candidates.size() > MAX_CANDIDATES) {
             throw new BusinessException(ErrorCode.INVALID_POLL,
                     ErrorCode.INVALID_POLL.getMessage() + " 후보는 " + MIN_CANDIDATES + "~" + MAX_CANDIDATES
@@ -69,9 +74,9 @@ public class PollService {
      * @throws BusinessException 구성원이 아닌 여행·없는 여행(404), 없는 투표(404),
      *                           이미 끝난 투표(409), 그 투표의 후보가 아님(400)
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public PollView vote(long tripId, long userId, long pollId, long candidateId) {
-        tripService.findMemberTrip(userId, tripId);
+        Trip trip = lockMemberTrip(tripId, userId);
         TripPoll poll = pollRepository.findByIdAndTripId(pollId, tripId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.POLL_NOT_FOUND));
         if (poll.isClosed()) {
@@ -86,30 +91,45 @@ public class PollService {
                 .ifPresentOrElse(vote -> vote.changeTo(candidate),
                         () -> voteRepository.save(TripPollVote.create(poll, candidate, userId)));
 
-        List<TripPollVote> votes = voteRepository.findByPollIdOrderByIdAsc(pollId);
-        long members = memberCount(tripId);
-        // 구성원이 모두 눌렀으면 그 자리에서 마감한다. 나간 사람이 있어 인원이 줄면 이미 넘을 수 있어서 >= 로 본다
-        if (votes.size() >= members) {
+        Set<Long> memberIds = currentMemberIds(trip);
+        List<TripPollVote> votes = voteRepository.findByPollIdOrderByIdAsc(pollId).stream()
+                .filter(vote -> memberIds.contains(vote.getUserId()))
+                .toList();
+        if (votes.size() == memberIds.size()) {
             poll.close();
         }
-        return view(poll, votes, members);
+        return view(poll, votes, memberIds.size());
     }
 
     /** 채팅 메시지 조회(BE2)가 함께 내려줄 최근 투표 상태. */
     public List<PollView> recentPolls(long tripId, long userId) {
-        tripService.findMemberTrip(userId, tripId);
+        Trip trip = tripService.findMemberTrip(userId, tripId);
         List<TripPoll> polls = pollRepository.findByTripIdOrderByIdDesc(tripId, Limit.of(RECENT_LIMIT));
         if (polls.isEmpty()) {
             return List.of();
         }
+        Set<Long> memberIds = currentMemberIds(trip);
         Map<Long, List<TripPollVote>> votesByPoll = new LinkedHashMap<>();
-        voteRepository.findByPollIdInOrderByIdAsc(polls.stream().map(TripPoll::getId).toList())
+        voteRepository.findByPollIdInOrderByIdAsc(polls.stream().map(TripPoll::getId).toList()).stream()
+                .filter(vote -> memberIds.contains(vote.getUserId()))
                 .forEach(vote -> votesByPoll.computeIfAbsent(vote.getPoll().getId(), id -> new ArrayList<>())
                         .add(vote));
-        long members = memberCount(tripId);
         return polls.stream()
-                .map(poll -> view(poll, votesByPoll.getOrDefault(poll.getId(), List.of()), members))
+                .map(poll -> view(poll, votesByPoll.getOrDefault(poll.getId(), List.of()), memberIds.size()))
                 .toList();
+    }
+
+    // 여행 삭제·나가기와 같은 잠금 순서로 시작하고, 잠금을 얻은 뒤 구성원을 확인한다.
+    private Trip lockMemberTrip(long tripId, long userId) {
+        return tripRepository.findByIdForUpdate(tripId)
+                .filter(trip -> tripService.isMember(trip, userId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
+    }
+
+    private Set<Long> currentMemberIds(Trip trip) {
+        Set<Long> memberIds = new HashSet<>(tripMemberRepository.findUserIdsByTripId(trip.getId()));
+        memberIds.add(trip.getUser().getId());
+        return memberIds;
     }
 
     /** 방장은 trip_member 에 없어서 하나 더한다. */
