@@ -1,5 +1,6 @@
 package com.dotlo.line4thon_18team.chat.poll;
 
+import com.dotlo.line4thon_18team.chat.ChatMessageService;
 import com.dotlo.line4thon_18team.chat.poll.dto.NewCandidate;
 import com.dotlo.line4thon_18team.chat.poll.dto.PollView;
 import com.dotlo.line4thon_18team.chat.poll.repository.TripPollRepository;
@@ -36,6 +37,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -53,6 +55,7 @@ class ChatPollApiTest {
 
     @Autowired MockMvc mvc;
     @Autowired PollService pollService;
+    @Autowired ChatMessageService chatMessages;
     @Autowired UserRepository users;
     @Autowired TripRepository trips;
     @Autowired TripMemberRepository tripMembers;
@@ -162,32 +165,35 @@ class ChatPollApiTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {1, 20, 21})
-    void 최근_투표는_최대_20개이며_후보를_한_번에_조회한다(int pollCount) {
-        List<PollView> newestFirst = new ArrayList<>();
-        for (int i = 0; i < pollCount; i++) {
-            newestFirst.add(0, givenPoll());
-        }
-        PollView newest = newestFirst.get(0);
-        newestFirst.set(0, pollService.vote(trip.getId(), owner, newest.pollId(), newest.candidates().get(1).id()));
-        em.flush();
-        em.clear();
+    @ValueSource(booleans = {false, true})
+    void 미투표자가_나가면_남은_구성원이_모두_투표한_투표를_마감한다(boolean ownerLeaves) throws Exception {
+        User thirdMember = newUser("새 동행자");
+        tripMembers.save(TripMember.create(trip, thirdMember));
+        PollView poll = givenPoll();
+        long candidateId = poll.candidates().get(0).id();
+        Long departingUser = ownerLeaves ? owner : companion;
+        Long remainingUser = ownerLeaves ? companion : owner;
 
-        var statistics = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
-        boolean statisticsEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
-        try {
-            long statementsBefore = statistics.getPrepareStatementCount();
-            long collectionFetchesBefore = statistics.getCollectionFetchCount();
-            List<PollView> result = pollService.recentPolls(trip.getId(), owner);
+        vote(remainingUser, poll.pollId(), candidateId).andExpect(status().isOk());
+        vote(thirdMember.getId(), poll.pollId(), candidateId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.votedCount").value(2))
+                .andExpect(jsonPath("$.totalMembers").value(3));
 
-            // 여행, 최근 투표, 후보, 구성원, 득표를 각각 한 번씩 조회한다.
-            assertThat(statistics.getPrepareStatementCount() - statementsBefore).isEqualTo(5);
-            assertThat(statistics.getCollectionFetchCount() - collectionFetchesBefore).isZero();
-            assertThat(result).containsExactlyElementsOf(newestFirst.subList(0, Math.min(pollCount, 20)));
-        } finally {
-            statistics.setStatisticsEnabled(statisticsEnabled);
-        }
+        mvc.perform(delete("/api/trips/{tripId}/members/me", trip.getId()).header("X-User-Id", departingUser))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tripDeleted").value(false));
+
+        mvc.perform(get("/api/trips/{tripId}/chat/polls", trip.getId()).header("X-User-Id", remainingUser))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("CLOSED"))
+                .andExpect(jsonPath("$[0].votedCount").value(2))
+                .andExpect(jsonPath("$[0].totalMembers").value(2));
+
+        vote(remainingUser, poll.pollId(), poll.candidates().get(1).id())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("POLL_CLOSED"));
     }
 
     @Test
@@ -219,6 +225,40 @@ class ChatPollApiTest {
     }
 
     @Test
+    void 채팅에_투표_카드와_알림을_남기고_새_메시지가_없어도_투표_상태를_내려준다() throws Exception {
+        PollView poll = givenPoll();
+        long candidateId = poll.candidates().get(0).id();
+        long tripId = trip.getId();
+
+        mvc.perform(get("/api/trips/{tripId}/chat/messages", tripId).header("X-User-Id", companion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messages[0].type").value("AI"))
+                .andExpect(jsonPath("$.messages[0].payload.card.kind").value("POLL"))
+                .andExpect(jsonPath("$.messages[0].payload.card.pollId").value(poll.pollId()))
+                .andExpect(jsonPath("$.polls[0].pollId").value(poll.pollId()));
+
+        vote(owner, poll.pollId(), candidateId).andExpect(status().isOk());
+        vote(owner, poll.pollId(), candidateId).andExpect(status().isOk());
+        long cardId = chatMessages.list(companion, tripId, null).get(0).id();
+
+        mvc.perform(get("/api/trips/{tripId}/chat/messages", tripId)
+                        .param("after", Long.toString(cardId)).header("X-User-Id", companion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messages.length()").value(1))
+                .andExpect(jsonPath("$.messages[0].type").value("SYSTEM"))
+                .andExpect(jsonPath("$.messages[0].text").value("방장님이 투표했어요"))
+                .andExpect(jsonPath("$.polls[0].votedCount").value(1));
+
+        long notificationId = chatMessages.list(companion, tripId, cardId).get(0).id();
+        mvc.perform(get("/api/trips/{tripId}/chat/messages", tripId)
+                        .param("after", Long.toString(notificationId)).header("X-User-Id", companion))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messages").isEmpty())
+                .andExpect(jsonPath("$.polls[0].pollId").value(poll.pollId()))
+                .andExpect(jsonPath("$.polls[0].votedCount").value(1));
+    }
+
+    @Test
     void 후보가_하나뿐이면_투표를_만들지_않는다() {
         assertThatThrownBy(() -> pollService.create(trip.getId(), owner, "어디 갈까요?",
                 List.of(new NewCandidate("p-1", "오사카성 공원", "공원"))))
@@ -234,6 +274,35 @@ class ChatPollApiTest {
         cleanupService.deleteByTrip(trip.getId());
 
         assertThat(polls.findById(poll.pollId())).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 20, 21})
+    void 최근_투표는_최대_20개이며_후보를_한_번에_조회한다(int pollCount) {
+        List<PollView> newestFirst = new ArrayList<>();
+        for (int i = 0; i < pollCount; i++) {
+            newestFirst.add(0, givenPoll());
+        }
+        PollView newest = newestFirst.get(0);
+        newestFirst.set(0, pollService.vote(trip.getId(), owner, newest.pollId(), newest.candidates().get(1).id()));
+        em.flush();
+        em.clear();
+
+        var statistics = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        boolean statisticsEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            long statementsBefore = statistics.getPrepareStatementCount();
+            long collectionFetchesBefore = statistics.getCollectionFetchCount();
+            List<PollView> result = pollService.recentPolls(trip.getId(), owner);
+
+            // 여행, 최근 투표, 후보, 구성원, 득표를 각각 한 번씩 조회한다.
+            assertThat(statistics.getPrepareStatementCount() - statementsBefore).isEqualTo(5);
+            assertThat(statistics.getCollectionFetchCount() - collectionFetchesBefore).isZero();
+            assertThat(result).containsExactlyElementsOf(newestFirst.subList(0, Math.min(pollCount, 20)));
+        } finally {
+            statistics.setStatisticsEnabled(statisticsEnabled);
+        }
     }
 
     // ---- helpers ----

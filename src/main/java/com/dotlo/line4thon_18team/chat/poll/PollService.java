@@ -1,7 +1,9 @@
 package com.dotlo.line4thon_18team.chat.poll;
 
+import com.dotlo.line4thon_18team.chat.ChatMessageService;
 import com.dotlo.line4thon_18team.chat.poll.dto.NewCandidate;
 import com.dotlo.line4thon_18team.chat.poll.dto.PollView;
+import com.dotlo.line4thon_18team.chat.poll.entity.PollStatus;
 import com.dotlo.line4thon_18team.chat.poll.entity.TripPoll;
 import com.dotlo.line4thon_18team.chat.poll.entity.TripPollCandidate;
 import com.dotlo.line4thon_18team.chat.poll.entity.TripPollVote;
@@ -14,11 +16,14 @@ import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.trip.service.TripService;
+import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -51,6 +56,9 @@ public class PollService {
     private final TripPollRepository pollRepository;
     private final TripPollCandidateRepository candidateRepository;
     private final TripPollVoteRepository voteRepository;
+    private final UserRepository userRepository;
+    private final ChatMessageService chatMessageService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 투표를 만든다. 투표 후보 만들기(AI)가 부른다.
@@ -68,6 +76,8 @@ public class PollService {
         TripPoll poll = TripPoll.create(trip, question, userId);
         candidates.forEach(c -> poll.addCandidate(c.placeId(), c.name(), c.tagline()));
         TripPoll saved = pollRepository.save(poll);
+        String payload = objectMapper.writeValueAsString(Map.of("card", Map.of("kind", "POLL", "pollId", saved.getId())));
+        chatMessageService.appendAi(tripId, question, payload);
         return view(saved, saved.getCandidates(), List.of(), memberCount(tripId));
     }
 
@@ -90,9 +100,17 @@ public class PollService {
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_POLL_CANDIDATE));
 
-        voteRepository.findByPollIdAndUserId(pollId, userId)
-                .ifPresentOrElse(vote -> vote.changeTo(candidate),
-                        () -> voteRepository.save(TripPollVote.create(poll, candidate, userId)));
+        TripPollVote previous = voteRepository.findByPollIdAndUserId(pollId, userId).orElse(null);
+        boolean changed = previous == null || !previous.getCandidate().getId().equals(candidateId);
+        if (previous == null) {
+            voteRepository.save(TripPollVote.create(poll, candidate, userId));
+        } else if (changed) {
+            previous.changeTo(candidate);
+        }
+        if (changed) {
+            String displayName = userRepository.getReferenceById(userId).getDisplayName();
+            chatMessageService.appendSystem(tripId, displayName + "님이 투표했어요");
+        }
 
         Set<Long> memberIds = currentMemberIds(trip);
         List<TripPollVote> votes = voteRepository.findByPollIdOrderByIdAsc(pollId).stream()
@@ -102,6 +120,30 @@ public class PollService {
             poll.close();
         }
         return view(poll, poll.getCandidates(), votes, memberIds.size());
+    }
+
+    /** 여행 행을 잠근 나가기 트랜잭션에서 구성원을 갱신한 뒤 호출한다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void closeCompletedPolls(Trip trip) {
+        List<TripPoll> openPolls = pollRepository.findByTripIdAndStatus(trip.getId(), PollStatus.OPEN);
+        if (openPolls.isEmpty()) {
+            return;
+        }
+
+        Set<Long> memberIds = currentMemberIds(trip);
+        List<Long> pollIds = openPolls.stream().map(TripPoll::getId).toList();
+        Map<Long, Long> voteCounts = new LinkedHashMap<>();
+        for (TripPollVote vote : voteRepository.findByPollIdInOrderByIdAsc(pollIds)) {
+            if (memberIds.contains(vote.getUserId())) {
+                voteCounts.merge(vote.getPoll().getId(), 1L, Long::sum);
+            }
+        }
+
+        for (TripPoll poll : openPolls) {
+            if (voteCounts.getOrDefault(poll.getId(), 0L) == memberIds.size()) {
+                poll.close();
+            }
+        }
     }
 
     /** 채팅 메시지 조회(BE2)가 함께 내려줄 최근 투표 상태. */
