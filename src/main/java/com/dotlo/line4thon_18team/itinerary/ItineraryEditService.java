@@ -136,6 +136,8 @@ public class ItineraryEditService {
                 .filter(place -> place.getMatchStatus() == PlaceMatchStatus.MATCHED && place.getPlaceId() != null)
                 .forEach(place -> savedByPlaceId.putIfAbsent(place.getPlaceId(), place));
 
+        run.prefetchHours().accept(savedByPlaceId.keySet());   // 장소가 많아도 조회를 동시에
+
         Map<LocalDate, List<VisitDraft>> byDate = new LinkedHashMap<>();
         current.days().forEach(day -> byDate.put(day.date(), day.visits()));
 

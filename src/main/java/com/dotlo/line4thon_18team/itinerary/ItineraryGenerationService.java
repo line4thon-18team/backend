@@ -99,7 +99,10 @@ public class ItineraryGenerationService {
     /** @param savedPlaceIds 고른 저장 장소 id. null이면 저장 장소 전체 */
     public GeneratedItinerary generate(long tripId, long userId, Collection<Long> savedPlaceIds) {
         ValidationRun run = validationService.prepare(tripId, userId);
+        long hoursStart = System.nanoTime();
         Candidates candidates = buildCandidates(run, selected(run.places(), savedPlaceIds));
+        log.info("영업시간 조회 tripId={} places={} elapsed={}ms", tripId,
+                candidates.open().size() + candidates.closedPlaceIds().size(), (System.nanoTime() - hoursStart) / 1_000_000);
         if (candidates.open().isEmpty()) {
             // 모든 장소가 여행 내내 영업하지 않는다. AI에게 배치할 것이 없어서 부르지 않는다
             return emptyItinerary(run, candidates.closedPlaceIds());
@@ -163,6 +166,7 @@ public class ItineraryGenerationService {
         if (usable.isEmpty()) {
             throw new BusinessException(ErrorCode.NO_PLACES_TO_PLAN);
         }
+        run.prefetchHours().accept(usable.stream().map(SavedPlace::getPlaceId).toList());   // 장소가 많아도 조회를 동시에
         Trip trip = run.trip();
         int dayCount = dayCount(trip);
         List<PlanGenerationInput.PlaceRef> open = new ArrayList<>();
