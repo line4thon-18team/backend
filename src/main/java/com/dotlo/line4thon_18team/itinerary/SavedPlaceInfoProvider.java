@@ -68,6 +68,11 @@ class SavedPlaceInfoProvider implements PlaceInfoProvider {
         return new GeoPoint(place.getLatitude(), place.getLongitude());
     }
 
+    /** 영업시간을 모르면 null. findPlaces와 같은 기억을 써서 같은 장소를 두 번 조회하지 않는다. */
+    OpeningHours hoursOf(String placeId) {
+        return openingHours(placeId);
+    }
+
     private OpeningHours openingHours(String placeId) {
         if (hoursCache.containsKey(placeId)) {
             return hoursCache.get(placeId);
